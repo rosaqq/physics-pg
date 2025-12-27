@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bola no telhado</title>
+<style>
+  body {
+    margin: 0;
+    background: #1e1e1e;
+    color: #fff;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  canvas {
+    background: #2e2e2e;
+    margin-top: 10px;
+    border-radius: 10px;
+  }
+  .controls {
+    margin-top: 10px;
+  }
+</style>
+<body>
+<a href="/physics-pg"><- back to index</a>
+<h2>Azul: trajetória perfeita | Laranja: novo ângulo</h2>
+
+<canvas id="scene" width="900" height="700"></canvas>
+
+<div class="controls">
+  <label for="roofHeight">Roof height: </label>
+  <input type="range" id="roofHeight" min="50" max="300" step="1" value="150">
+  <label for="angle">Throw angle: </label>
+  <input type="range" id="angle" min="0" max="1.5" step="0.001" value="0.785">
+</div>
+
+<script>
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+const roofSlider = document.getElementById("roofHeight");
+const angleSlider = document.getElementById("angle");
+
+const width = canvas.width;
+const height = canvas.height;
+const g = 9.81;
+const scale = 30; // px/m
+
+const groundY = height - 100;
+const roofBaseWidth = 400; // px
+
+function drawScene(roofHeight, throwAngle) {
+  ctx.clearRect(0, 0, width, height);
+
+  // --- Roof geometry ---
+  const xLeft = 200;
+  const yLeft = groundY;
+  const xRight = xLeft + roofBaseWidth;
+  const yRight = groundY;
+  const xTop = xLeft + roofBaseWidth / 2;
+  const yTop = groundY - roofHeight;
+
+  // --- Draw roof ---
+  ctx.beginPath();
+  ctx.moveTo(xLeft, yLeft);
+  ctx.lineTo(xTop, yTop);
+  ctx.lineTo(xRight, yRight);
+  ctx.closePath();
+  ctx.fillStyle = "#444";
+  ctx.fill();
+
+  // Coordinates in meters
+  const x0 = xLeft;
+  const y0 = yLeft;
+  const xTopDist = (xTop - x0) / scale;
+  const hTop = (y0 - yTop) / scale;
+  const dx = (xRight - x0) / scale;
+
+  // --- Compute the perfect angle & velocity ---
+  let bestAngle = 0;
+  let bestV = 0;
+  let minErr = Infinity;
+
+  for (let a = 0.1; a < Math.PI / 2; a += 0.001) {
+    const numerator = g * xTopDist ** 2;
+    const denominator = 2 * (Math.cos(a) ** 2) * (xTopDist * Math.tan(a) - hTop);
+    if (denominator <= 0) continue;
+    const v = Math.sqrt(numerator / denominator);
+    const yAtRight = dx * Math.tan(a) - (g * dx ** 2) / (2 * v ** 2 * Math.cos(a) ** 2);
+    const err = Math.abs(yAtRight); // should be 0 if it lands exactly
+    if (err < minErr) {
+      minErr = err;
+      bestAngle = a;
+      bestV = v;
+    }
+  }
+
+  // --- Function to draw trajectory ---
+  function drawTrajectory(angle, v, color) {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    for (let t = 0; t < 6; t += 0.02) {
+      const x = x0 + v * Math.cos(angle) * t * scale;
+      const y = y0 - (v * Math.sin(angle) * t - 0.5 * g * t * t) * scale;
+      if (x > width || y > height) break;
+      ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  // --- Draw trajectories ---
+  drawTrajectory(bestAngle, bestV, "blue"); // perfect
+  drawTrajectory(parseFloat(throwAngle), bestV, "orange"); // user-chosen angle, same speed
+
+  // --- Draw points ---
+  ctx.beginPath();
+  ctx.arc(x0, y0, 5, 0, 2 * Math.PI);
+  ctx.fillStyle = "red";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(xTop, yTop, 5, 0, 2 * Math.PI);
+  ctx.fillStyle = "cyan";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(xRight, yRight, 5, 0, 2 * Math.PI);
+  ctx.fillStyle = "lime";
+  ctx.fill();
+
+  // --- Display HUD ---
+  ctx.fillStyle = "white";
+  ctx.font = "16px sans-serif";
+  ctx.fillText(`Perfect (blue) angle: ${(bestAngle * 180 / Math.PI).toFixed(1)}°`, 20, 30);
+  ctx.fillText(`Speed: ${bestV.toFixed(2)} m/s`, 20, 50);
+  ctx.fillStyle = "orange";
+  ctx.fillText(`Selected (orange) angle: ${(throwAngle * 180 / Math.PI).toFixed(1)}°`, 20, 70);
+}
+
+function render() {
+  const roofHeight = parseFloat(roofSlider.value);
+  const angle = parseFloat(angleSlider.value);
+  drawScene(roofHeight, angle);
+}
+
+roofSlider.addEventListener("input", render);
+angleSlider.addEventListener("input", render);
+render();
+</script>
+
+
+</body></html>
