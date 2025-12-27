@@ -1,92 +1,172 @@
 <!DOCTYPE html>
-<html lang="en"><head>
-<meta http-equiv="content-type" content="text/html; charset=UTF-8">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bola no monte</title>
     <style>
-        body {
+        html, body {
+            height: 100%;
             margin: 0;
+        }
+
+        body {
             background: #1e1e1e;
             color: #fff;
             font-family: sans-serif;
+
+            /* layout */
             display: flex;
             flex-direction: column;
             align-items: center;
-            position: relative;
+
+            /* no scrolling: canvas will adapt */
+            overflow: hidden;
+            box-sizing: border-box;
+            padding: 10px;
+            gap: 10px;
         }
+
+        a, h2 {
+            margin: 0;
+            flex: 0 0 auto;
+        }
+
         .canvas-container {
             position: relative;
-            display: inline-block;
+
+            /* take all remaining space between header and controls */
+            flex: 1 1 auto;
+
+            /* prevent children from forcing overflow */
+            min-height: 0;
+
+            /* center canvas */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            width: 100%;
+            max-width: 900px; /* keep a nice max width */
         }
+
+        /* We scale the canvas via CSS, not by changing its internal drawing units */
         canvas {
             background: #2e2e2e;
-            margin-top: 10px;
             border-radius: 10px;
             display: block;
+
+            /* will be set dynamically too, but these help */
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
         }
+
         .controls {
-            margin-top: 10px;
+            flex: 0 0 auto;
+            width: 100%;
+            max-width: 900px;
+
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 12px;
+            align-items: center;
+            justify-content: center;
+
+            padding-bottom: env(safe-area-inset-bottom, 0px);
         }
+
+        .controls label {
+            white-space: nowrap;
+        }
+
         /* floating info box */
         #infoBox {
             position: absolute;
-            top: 20px;
-            left: 20px;
+            top: 12px;
+            left: 12px;
             background: rgba(0, 0, 0, 0.6);
             border: 1px solid #ccc;
             border-radius: 8px;
             padding: 8px 12px;
             font-size: 14px;
             line-height: 1.4;
-            pointer-events: none; /* let clicks pass through to canvas */
+            pointer-events: none;
             color: #fff;
         }
     </style>
+</head>
+
 <body>
-<a href="/physics-pg"><- back to index</a>
+<a href="/physics-pg">&larr; back to index</a>
 <h2>Azul: melhor ângulo</h2>
 
-<div class="canvas-container">
+<div class="canvas-container" id="canvasWrap">
+    <!-- Keep internal resolution fixed for your existing math -->
     <canvas id="scene" width="900" height="1200"></canvas>
     <div id="infoBox">
-        <b>Best angle:</b> 36.65°<br>
+        <b>Best angle:</b> 36.65°<br />
         <b>Angle:</b> 45.55°
-      </div>
+    </div>
 </div>
 
-<div class="controls">
-    <label for="slope">Hill steepness: </label>
-    <input type="range" id="slope" min="0" max="1.1" step="0.01" value="0.3">
-    <label for="angle">Throw angle: </label>
-    <input type="range" id="angle" min="0" max="1.5" step="0.001" value="0.795">
+<div class="controls" id="controls">
+    <label for="slope">Hill steepness:</label>
+    <input type="range" id="slope" min="0" max="1.1" step="0.01" value="0.3" />
+
+    <label for="angle">Throw angle:</label>
+    <input type="range" id="angle" min="0" max="1.5" step="0.001" value="0.795" />
 </div>
 
 <script>
     const canvas = document.getElementById("scene");
     const ctx = canvas.getContext("2d");
+
+    const canvasWrap = document.getElementById("canvasWrap");
+    const controls = document.getElementById("controls");
+
     const slopeSlider = document.getElementById("slope");
     const angleSlider = document.getElementById("angle");
     const infoBox = document.getElementById("infoBox");
 
-    const width = canvas.width;
-    const height = canvas.height;
+    // "World" size (your original internal coordinates)
+    const worldW = canvas.width;   // 900
+    const worldH = canvas.height;  // 1200
+
     const g = 9.81;
     const scale = 30;
     const v0 = 10;
     const x0 = 100;
-    const y0 = height - 900;
+    const y0 = worldH - 900;
+
+    function fitCanvasToAvailableSpace() {
+        // Available space is basically the canvasWrap content box.
+        const wrapRect = canvasWrap.getBoundingClientRect();
+
+        // Fit while preserving aspect ratio
+        const sx = wrapRect.width / worldW;
+        const sy = wrapRect.height / worldH;
+        const s = Math.min(sx, sy);
+
+        const cssW = Math.floor(worldW * s);
+        const cssH = Math.floor(worldH * s);
+
+        canvas.style.width = cssW + "px";
+        canvas.style.height = cssH + "px";
+    }
 
     function drawScene(slope, angle) {
-        ctx.clearRect(0, 0, width, height);
-        let bestangle = (Math.PI / 4) + (Math.atan(-slope) / 2);
+        ctx.clearRect(0, 0, worldW, worldH);
+
+        const bestangle = (Math.PI / 4) + (Math.atan(-slope) / 2);
 
         // --- Hill ---
         ctx.beginPath();
-        ctx.moveTo(0, height);
+        ctx.moveTo(0, worldH);
         ctx.lineTo(0, y0 + slope * (0 - x0));
-        ctx.lineTo(width, y0 + slope * (width - x0));
-        ctx.lineTo(width, height);
+        ctx.lineTo(worldW, y0 + slope * (worldW - x0));
+        ctx.lineTo(worldW, worldH);
         ctx.closePath();
         ctx.fillStyle = "#228B22";
         ctx.fill();
@@ -97,7 +177,7 @@
         for (let t = 0; t < 6; t += 0.02) {
             const x = x0 + v0 * Math.cos(bestangle) * t * scale;
             const y = y0 - (v0 * Math.sin(bestangle) * t - 0.5 * g * t * t) * scale;
-            if (x > width || y > height) break;
+            if (x > worldW || y > worldH) break;
             ctx.lineTo(x, y);
         }
         ctx.strokeStyle = "blue";
@@ -110,7 +190,7 @@
         for (let t = 0; t < 6; t += 0.02) {
             const x = x0 + v0 * Math.cos(angle) * t * scale;
             const y = y0 - (v0 * Math.sin(angle) * t - 0.5 * g * t * t) * scale;
-            if (x > width || y > height) break;
+            if (x > worldW || y > worldH) break;
             ctx.lineTo(x, y);
         }
         ctx.strokeStyle = "orange";
@@ -138,10 +218,26 @@
         drawScene(slope, angle);
     }
 
+    // Refit on resize/orientation changes and mobile UI changes
+    const refit = () => {
+        fitCanvasToAvailableSpace();
+        render();
+    };
+
+    window.addEventListener("resize", refit);
+
+    // Helps on mobile when the URL bar shows/hides
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", refit);
+        window.visualViewport.addEventListener("scroll", refit);
+    }
+
     slopeSlider.addEventListener("input", render);
     angleSlider.addEventListener("input", render);
+
+    // Initial
+    fitCanvasToAvailableSpace();
     render();
 </script>
-
-
-</body></html>
+</body>
+</html>
